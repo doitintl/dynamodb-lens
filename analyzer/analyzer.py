@@ -158,7 +158,7 @@ class TableAnalyzer:
         self.stream_desc = self.ddbs_client.describe_stream(**kwargs)['StreamDescription']
         self.count_shards(stream_desc=self.stream_desc)
         last_shard_id = self.stream_desc['LastEvaluatedShardId'] if 'LastEvaluatedShardId' in self.stream_desc else None
-        logging.info(f'Stream: {self.stream_arn} LastEvaluatedShardId: {last_shard_id}')
+        logging.debug(f'Stream: {self.stream_arn} LastEvaluatedShardId: {last_shard_id}')
 
         if last_shard_id is not None:
             while last_shard_id is not None:
@@ -166,7 +166,7 @@ class TableAnalyzer:
                 stream_desc = self.ddbs_client.describe_stream(**kwargs)['StreamDescription']
                 last_shard_id = stream_desc['LastEvaluatedShardId'] if 'LastEvaluatedShardId' in stream_desc else None
                 self.count_shards(stream_desc=stream_desc)
-                logging.info(f'Stream: {self.stream_arn} LastEvaluatedShardId: {last_shard_id}')
+                logging.debug(f'Stream: {self.stream_arn} LastEvaluatedShardId: {last_shard_id}')
 
             del self.stream_desc['LastEvaluatedShardId']
 
@@ -201,8 +201,8 @@ class TableAnalyzer:
         max_rcu_parts = ceil(self.estimations_dict['Data']['RCU'][max_rcu_key] / self.rcu_part_hard_limit)
 
         self.estimations_dict['Data']['Partitions'] = {
-            max_wcu_key: max_wcu_parts,
-            max_rcu_key: max_rcu_parts
+            max_wcu_key: max_wcu_parts if max_wcu_parts > 0 else 1,
+            max_rcu_key: max_rcu_parts if max_rcu_parts > 0 else 1
         }
 
     def estimate_partitions(self):
@@ -230,7 +230,14 @@ class TableAnalyzer:
                 The estimated partitions are calculated by taking this value, dividing by the partition limits 
                 and then multiplying by 2; based on the assumption that DynamoDB is always ready to double the workload.
                 """
+
             self.partitions = self.estimations_dict['Data']['Partitions'][max_parts_key] * 2
+            # handle edge case for low utilization tables
+            if self.partitions < 4 and self.billing_mode == 'PAY_PER_REQUEST':
+                self.estimations_dict['Results']['EstimationMethod'] = 'OnDemandBaseSpecs'
+                self.estimations_dict['Results']['EstimationMethodDescription'] = \
+                    f"On-Demand Tables initially have 4 partitions and there is no data that indicates a scaling event."
+                self.partitions = 4
 
     def estimate_maximums(self):
         # On-Demand tables will be able to use the fully allocated previous peak capacity and partition hard limits
@@ -296,6 +303,7 @@ class TableAnalyzer:
         start_time = datetime.today() - timedelta(days=91)
         end_time = datetime.today() - timedelta(days=1)
         cw_paginator = self.cw_client.get_paginator('get_metric_data')
+
         pages = cw_paginator.paginate(
             MetricDataQueries=[
                 {
@@ -382,24 +390,28 @@ class TableAnalyzer:
         for page in pages:
             for results in page['MetricDataResults']:
                 if results['Id'] == 'cwcu':
-                    max_cwcu_per_period.append(max(results['Values']))
-                    self.metrics_data['ConsumedWCU']['Timestamps'].extend(results['Timestamps'])
-                    self.metrics_data['ConsumedWCU']['Values'].extend(results['Values'])
+                    if len(results['Values']) > 0:
+                        max_cwcu_per_period.append(max(results['Values']))
+                        self.metrics_data['ConsumedWCU']['Timestamps'].extend(results['Timestamps'])
+                        self.metrics_data['ConsumedWCU']['Values'].extend(results['Values'])
                 elif results['Id'] == 'crcu':
-                    max_crcu_per_period.append(max(results['Values']))
-                    self.metrics_data['ConsumedRCU']['Timestamps'].extend(results['Timestamps'])
-                    self.metrics_data['ConsumedRCU']['Values'].extend(results['Values'])
-                if results['Id'] == 'pwcu':
-                    max_pwcu_per_period.append(max(results['Values']))
-                    self.metrics_data['ProvisionedWCU']['Timestamps'].extend(results['Timestamps'])
-                    self.metrics_data['ProvisionedWCU']['Values'].extend(results['Values'])
+                    if len(results['Values']) > 0:
+                        max_crcu_per_period.append(max(results['Values']))
+                        self.metrics_data['ConsumedRCU']['Timestamps'].extend(results['Timestamps'])
+                        self.metrics_data['ConsumedRCU']['Values'].extend(results['Values'])
+                elif results['Id'] == 'pwcu':
+                    if len(results['Values']) > 0:
+                        max_pwcu_per_period.append(max(results['Values']))
+                        self.metrics_data['ProvisionedWCU']['Timestamps'].extend(results['Timestamps'])
+                        self.metrics_data['ProvisionedWCU']['Values'].extend(results['Values'])
                 elif results['Id'] == 'prcu':
-                    max_prcu_per_period.append(max(results['Values']))
-                    self.metrics_data['ProvisionedRCU']['Timestamps'].extend(results['Timestamps'])
-                    self.metrics_data['ProvisionedRCU']['Values'].extend(results['Values'])
+                    if len(results['Values']) > 0:
+                        max_prcu_per_period.append(max(results['Values']))
+                        self.metrics_data['ProvisionedRCU']['Timestamps'].extend(results['Timestamps'])
+                        self.metrics_data['ProvisionedRCU']['Values'].extend(results['Values'])
 
         self.metrics_data['MaxConsumedWCU'] = ceil(max(max_cwcu_per_period)/consumed_s)
         self.metrics_data['MaxConsumedRCU'] = ceil(max(max_crcu_per_period)/consumed_s)
-        self.metrics_data['MaxProvisionedWCU'] = ceil(max(max_pwcu_per_period))
-        self.metrics_data['MaxProvisionedRCU'] = ceil(max(max_prcu_per_period))
+        self.metrics_data['MaxProvisionedWCU'] = ceil(max(max_pwcu_per_period)) if len(max_pwcu_per_period) > 0 else 0
+        self.metrics_data['MaxProvisionedRCU'] = ceil(max(max_prcu_per_period)) if len(max_prcu_per_period) > 0 else 0
         logging.debug(self.metrics_data)
