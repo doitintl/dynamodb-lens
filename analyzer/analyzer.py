@@ -1,5 +1,4 @@
 import logging
-import os
 from datetime import datetime, timedelta
 from math import ceil
 from utils import json_dumps_iso, return_boto3_client
@@ -21,8 +20,6 @@ and disabled with:
  aws dynamodb update-table --table-name <value> --stream-specification StreamEnabled=false
 Please review the documentation and understand the implications of running these commands before executing them.
 '''
-
-logging.basicConfig(level=os.environ.get('LOG_LEVEL', 'INFO'))
 
 
 class TableAnalyzer:
@@ -66,6 +63,7 @@ class TableAnalyzer:
         self.detailed = None
         self.output = None
         self.stream_enabled = None
+        self.deletion_protection = None
         self.stream_open_shards = 0
         self.stream_closed_shards = 0
         self.stream_total_shards = 0
@@ -92,8 +90,8 @@ class TableAnalyzer:
         logging.info(f'Working on table: {self.table_name}')
         self.describe_table()
         self.is_stream_enabled()
-        logging.info(f'Working on stream: {self.stream_arn}')
         if self.stream_enabled:
+            logging.info(f'Describing stream: {self.stream_arn}. This can take a while on high performance tables.')
             self.describe_stream()
         logging.info(f'Pulling Cloudwatch metrics for table: {self.table_name}')
         self.get_metric_data()
@@ -117,13 +115,29 @@ class TableAnalyzer:
 
     def generate_summary(self):
         self.summary = {
-            'Name': self.table_name,
-            'Arn': self.table_arn,
+            'TableName': self.table_name,
+            'TableArn': self.table_arn,
+            'DeletionProtection': self.deletion_protection,
             'SizeMB': self.size_in_mb,
             'ItemCount': self.item_count,
-            'BillingMode': self.billing_mode,
-            'Estimations': self.estimations_dict['Results']
+            'BillingMode': 'ON-DEMAND' if self.billing_mode == 'PAY_PER_REQUEST' else 'PROVISIONED',
         }
+        if self.billing_mode == 'PROVISIONED':
+            self.summary['ProvisionedThroughput'] = self.table_desc['ProvisionedThroughput']
+
+        if 'GlobalSecondaryIndexes' in self.table_desc:
+            self.summary['NumGSI'] = len(self.table_desc['GlobalSecondaryIndexes'])
+
+        if 'LocalSecondaryIndexes' in self.table_desc:
+            self.summary['NumLSI'] = len(self.table_desc['GlobalSecondaryIndexes'])
+
+        if 'NumLSI' or 'NumGSI' in self.table_desc:
+            self.summary['IndexWarning'] = 'TODO: Indexes should be examined as well, but are not yet implemented in this program.'
+            logging.warning(self.summary['IndexWarning'])
+
+        if self.stream_enabled:
+            self.summary['StreamArn'] = self.stream_arn
+        self.summary['Estimations'] = self.estimations_dict['Results']
 
     def generate_verbose(self):
         self.detailed = {
@@ -139,7 +153,13 @@ class TableAnalyzer:
         self.size_in_bytes = self.table_desc['TableSizeBytes']
         self.size_in_mb = ceil(self.size_in_bytes / 1024/1000) if self.size_in_bytes > 1024000 else 1
         self.item_count = self.table_desc['ItemCount']
-        self.billing_mode = self.table_desc['BillingModeSummary']['BillingMode']
+        if 'BillingModeSummary' in self.table_desc:
+            self.billing_mode = self.table_desc['BillingModeSummary']['BillingMode']
+        else:
+            self.billing_mode = 'PROVISIONED'
+        self.deletion_protection = self.table_desc['DeletionProtectionEnabled']
+        if not self.deletion_protection:
+            logging.warning(f'Deletion protection is not enabled for {self.table_name}')
 
     def count_shards(self, stream_desc):
         self.stream_total_shards += len(stream_desc['Shards'])
@@ -179,6 +199,7 @@ class TableAnalyzer:
     def generate_estimations_data(self):
         self.estimations_dict = {
             "Data": {
+                "Description": "Raw estimation data used for debugging purposes only!",
                 "WCU": {
                     "CurrentProvisionedWCU": self.table_desc['ProvisionedThroughput']['WriteCapacityUnits'],
                     "MaxConsumedWCU": self.metrics_data['MaxConsumedWCU'],
@@ -251,8 +272,18 @@ class TableAnalyzer:
         # Provisioned will be able to use, well, whatever is provisioned / partitions
         else:
             part_comments = f'Adaptive capacity will allow individual partitions to burst higher (up to per-partition limit or table limit, whichever is lower) based on WCU/RCU'
+            if self.estimations_dict['Results']['EstimationMethod'] not in ['CurrentProvisionedWCU', 'CurrentProvisionedRCU']:
+                previous_est_method = self.estimations_dict['Results']['EstimationMethod']
+                self.estimations_dict['Results']['EstimationMethodDescription'] = f"""
+                {previous_est_method} data indicates there are ~{self.partitions} Partitions. However, {self.table_name}'s
+                current {self.billing_mode} capacity settings are limiting the overall throughput of the table and
+                partitions.
+                """
+                self.estimations_dict['Results']['EstimationMethod'] = 'CurrentProvisionedThroughput'
+
             self.max_rcu = self.table_desc['ProvisionedThroughput']['ReadCapacityUnits']
             self.max_wcu = self.table_desc['ProvisionedThroughput']['WriteCapacityUnits']
+
             self.rcu_part_soft_limit = ceil(self.max_rcu / self.partitions)
             self.wcu_part_soft_limit = ceil(self.max_wcu / self.partitions)
             rcu_part_limit = self.rcu_part_soft_limit

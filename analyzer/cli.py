@@ -6,8 +6,12 @@ from analyzer import TableAnalyzer, DESCRIPTION
 
 from utils import write_output
 
+logging.basicConfig(
+    level=os.environ.get('LOG_LEVEL', 'INFO'),
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
-logging.basicConfig(level=os.environ.get('LOG_LEVEL', 'INFO'))
 parser = argparse.ArgumentParser(
     prog='DynamoDBTableAnalyzer',
     description=f"{DESCRIPTION}",
