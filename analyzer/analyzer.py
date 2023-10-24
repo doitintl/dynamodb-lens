@@ -131,7 +131,7 @@ class TableAnalyzer:
         if 'LocalSecondaryIndexes' in self.table_desc:
             self.summary['NumLSI'] = len(self.table_desc['GlobalSecondaryIndexes'])
 
-        if 'NumLSI' or 'NumGSI' in self.table_desc:
+        if 'NumLSI' in self.table_desc or 'NumGSI' in self.table_desc:
             self.summary['IndexWarning'] = 'TODO: Indexes should be examined as well, but are not yet implemented in this program.'
             logging.warning(self.summary['IndexWarning'])
 
