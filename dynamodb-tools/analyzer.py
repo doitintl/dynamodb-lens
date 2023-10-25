@@ -43,6 +43,7 @@ class TableAnalyzer:
         self.stream_arn = None
         self.size_in_bytes = None
         self.size_in_mb = None
+        self.size_in_gb = None
         self.item_count = None
         self.ec_multiplier = 2
         self.wcu_size_bytes = 1000
@@ -151,7 +152,8 @@ class TableAnalyzer:
         self.table_desc = self.ddb_client.describe_table(TableName=self.table_name)["Table"]
         self.table_arn = self.table_desc['TableArn']
         self.size_in_bytes = self.table_desc['TableSizeBytes']
-        self.size_in_mb = ceil(self.size_in_bytes / 1024/1000) if self.size_in_bytes > 1024000 else 1
+        self.size_in_mb = ceil(self.size_in_bytes/1024/1000) if self.size_in_bytes > 1024000 else 1
+        self.size_in_gb = ceil(self.size_in_bytes/1024/1000/1000) if self.size_in_bytes > 1024000000 else 1
         self.item_count = self.table_desc['ItemCount']
         if 'BillingModeSummary' in self.table_desc:
             self.billing_mode = self.table_desc['BillingModeSummary']['BillingMode']
@@ -223,7 +225,8 @@ class TableAnalyzer:
 
         self.estimations_dict['Data']['Partitions'] = {
             max_wcu_key: max_wcu_parts if max_wcu_parts > 0 else 1,
-            max_rcu_key: max_rcu_parts if max_rcu_parts > 0 else 1
+            max_rcu_key: max_rcu_parts if max_rcu_parts > 0 else 1,
+            'CurrentTableSize': ceil(self.size_in_gb/10) if self.size_in_gb > 0 else 1
         }
 
     def estimate_partitions(self):
