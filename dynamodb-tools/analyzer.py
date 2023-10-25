@@ -178,7 +178,7 @@ class TableAnalyzer:
         self.stream_desc = self.ddbs_client.describe_stream(**kwargs)['StreamDescription']
         self.count_shards(stream_desc=self.stream_desc)
         last_shard_id = self.stream_desc['LastEvaluatedShardId'] if 'LastEvaluatedShardId' in self.stream_desc else None
-        logging.debug(f'Stream: {self.stream_arn} LastEvaluatedShardId: {last_shard_id}')
+        logging.info(f'Stream: {self.stream_arn} LastEvaluatedShardId: {last_shard_id}')
 
         if last_shard_id is not None:
             while last_shard_id is not None:
@@ -186,7 +186,7 @@ class TableAnalyzer:
                 stream_desc = self.ddbs_client.describe_stream(**kwargs)['StreamDescription']
                 last_shard_id = stream_desc['LastEvaluatedShardId'] if 'LastEvaluatedShardId' in stream_desc else None
                 self.count_shards(stream_desc=stream_desc)
-                logging.debug(f'Stream: {self.stream_arn} LastEvaluatedShardId: {last_shard_id}')
+                logging.info(f'Stream: {self.stream_arn} LastEvaluatedShardId: {last_shard_id}')
 
             del self.stream_desc['LastEvaluatedShardId']
 
