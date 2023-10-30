@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 from math import ceil
-from utils import json_dumps_iso, return_boto3_client
+from dynamodb_lens.utils import json_dumps_iso, return_boto3_client
 
 
 DESCRIPTION = '''This program estimates a DynamoDB Table's current partition count and performance capabilities.

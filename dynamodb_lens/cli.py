@@ -2,9 +2,8 @@ import argparse
 import logging
 import os
 from argparse import RawTextHelpFormatter
-from analyzer import TableAnalyzer, DESCRIPTION
-
-from utils import write_output
+from dynamodb_lens.analyzer import TableAnalyzer, DESCRIPTION
+from dynamodb_lens.utils import write_output
 
 logging.basicConfig(
     level=os.environ.get('LOG_LEVEL', 'INFO'),
@@ -13,13 +12,13 @@ logging.basicConfig(
 )
 
 parser = argparse.ArgumentParser(
-    prog='DynamoDBTableAnalyzer',
+    prog='cli',
     description=f"{DESCRIPTION}",
     formatter_class=RawTextHelpFormatter
 )
 
 parser.add_argument("--table_name", required=True)
-parser.add_argument("--save_output", action='store_true')
+parser.add_argument("--save_output", action='store_true', help="save the json formatted output to a file")
 parser.add_argument("--verbose", action='store_true', help="Print the full output, otherwise a summary will be printed")
 args = parser.parse_args()
 
