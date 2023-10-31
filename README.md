@@ -23,22 +23,7 @@ python3 -m dynamodb_lens.cli --table_name sentences1
 
 ## Table Analyzer 
 
-This library analyzes a table's current state, configuration and usage in order to:
-
-### TableAnalyzer class usage
-The class can be imported and called directly if the `dynamodb_lens.cli` doesn't fit the use case    
-The only required parameter is table_name, and optionally `verbose=True|False` plus already instantiated boto3 clients can be passed in.
-```python
-from dynamodb_lens.analyzer import TableAnalyzer
-
-table = TableAnalyzer(
-    table_name='foo',
-    verbose=False
-)
-table.save_output()
-```
-
-### 1. Estimate performance capabilities 
+This library analyzes a table's current state, configuration and usage in order to estimate performance capabilities.     
 A DynamoDB Table's current partition count as well as table settings will determine its performance capabilities.       
 Partition count is not exposed directly, but we can infer the number of partitions in several ways:
 1. Count the number of Open DynamoDB Stream shards, it is a 1:1 mapping of Open shards to Partitions
@@ -63,21 +48,17 @@ and disabled with:
 Please review the documentation and understand the implications of running these commands before executing them.
 
 ----
-### 2. TODO: Capacity recommendations 
 
-NOTE: This is a future state item planned, but not currently implemented.    
-On-Demand capacity mode for DynamoDB allows unpredictable workloads to avoid throttling (ish), but this stability comes at a cost.    
-It is significantly more expensive than Provisioned in most cases.    
-There are many scenarios where On-Demand is either not necessary or a provisioned table will flat out be cheaper.   
+### TableAnalyzer class usage
+The class can be imported and called directly if the `dynamodb_lens.cli` doesn't fit the use case    
+The only required parameter is table_name, and optionally `verbose=True|False` plus already instantiated boto3 clients can be passed in.   
 
-The recommendation should inform the user of potential cost savings opportunity.     
-We can present various configurations and the associated cost savings estimates and risk levels of switching to provisioned.     
+```python
+from dynamodb_lens.analyzer import TableAnalyzer
 
-For example, switching to Provisioned Throughput mode with:    
-MIN/MAX Autoscaling WCU/RCU settings    
-P33 MIN/P100 MAX Autoscaling WCU/RCU settings    
-P50 MIN/P100 MAX Autoscaling WCU/RCU settings    
-P90 MIN/P100 MAX Autoscaling WCU/RCU settings    
-P100 static WCU/RCU settings    
-
-Will provide varying degrees of cost savings with directly linked levels of risk.
+table = TableAnalyzer(
+    table_name='foo',
+    verbose=False
+)
+table.save_output()
+```

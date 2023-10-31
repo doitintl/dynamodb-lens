@@ -6,7 +6,7 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
     name='dynamodb-lens',
-    version='23.10.dev4',
+    version='23.10.dev5',
     url='https://github.com/anorth848/dynamodb-lens',
     license='MIT',
     author='Adam North',
