@@ -4,21 +4,15 @@ from math import ceil
 from dynamodb_lens.utils import json_dumps_iso, return_boto3_client
 
 
-DESCRIPTION = '''This program estimates a DynamoDB Table's current partition count and performance capabilities.
-Partition count is not exposed directly, but we can infer the number of partitions several ways:
-1. Count the number of Open DynamoDB Stream shards, it is a 1:1 mapping of Open shards to Partitions
-2. Check cloudwatch max Provisioned settings over the last 3 months
-3. Check cloudwatch max WCU/RCU utilization over the last 1 month
-4. Check current WCU/RCU settings on the table if Provisioned mode is currently configured 
-If Streams is not enabled, this program will estimate current number of partitions based on the maximum values 
-of #2-4 above. DynamoDB tables never give back partitions once they've been allocated.
+DESCRIPTION = '''This library analyzes a table's current state, configuration and usage in order to estimate performance capabilities.     
+A DynamoDB Table's current partition count as well as table settings will determine its performance capabilities.       
+Partition count is not exposed directly, but we can infer the number of partitions using several methods.
 
-This program prefers DynamoDB Streams to be enabled for the --table_name in order to accurately determine number of partitions.
-Enabling streams is outside the scope of this program, it can be done via:
- aws dynamodb update-table --table-name <value> --stream-specification StreamEnabled=true,StreamViewType=KEYS_ONLY
-and disabled with:
- aws dynamodb update-table --table-name <value> --stream-specification StreamEnabled=false
-Please review the documentation and understand the implications of running these commands before executing them.
+If Streams is not enabled, this program will estimate current number of partitions based on the maximum WCU/RCU values 
+calculated from the data gathered.    
+
+***This program is more accurate if DynamoDB Streams is enabled for the table.***   
+Please view the README for more details.
 '''
 
 
