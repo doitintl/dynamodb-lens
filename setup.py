@@ -6,9 +6,9 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
     name='dynamodb-lens',
-    version='23.10.dev3',
+    version='23.10.dev4',
     url='https://github.com/anorth848/dynamodb-lens',
-    license='GNU General Public License v3.0',
+    license='MIT',
     author='Adam North',
     author_email='anorth848@gmail.com',
     python_requires='>=3.7',
@@ -17,5 +17,14 @@ setup(
     long_description=long_description,
     long_description_content_type='text/markdown',
     packages=find_packages(include=['dynamodb_lens', 'dynamodb_lens.*']),
-    keywords='dynamodb dynamodb-lens'
+    keywords='dynamodb dynamodb-lens',
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+        'Intended Audience :: Information Technology',
+        'License :: OSI Approved :: MIT License',
+        'Natural Language :: English',
+        'Operating System :: OS Independent',
+        'Programming Language :: Python',
+        'Topic :: Database',
+    ]
 )
