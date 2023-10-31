@@ -1,21 +1,54 @@
-# DynamoDB Tools
+# DynamoDB Lens
 
-A collection of tools to help in the administration and optimization of DynamoDB tables
+A set of tools to help understand DynamoDB table performance capabilities and potential cost optimization opportunities.   
 
-## Analyzer 
+## Installation and usage
 
-This program Analyzes a current table's configuration and performs the following functions.
+### Installation
+```shell
+python3 -m pip install dynamodb-lens
+```
+### CLI usage
+```shell
+usage: dynamodb_lens.cli [-h] --table_name TABLE_NAME [--save_output] [--verbose]
+optional arguments:
+  -h, --help            show this help message and exit
+  --table_name TABLE_NAME
+  --save_output         save the json formatted output to a file
+  --verbose             Print the full output, otherwise a summary will be printed
 
-### 1. Estimator 
-The Estimator estimates a DynamoDB Table's current partition count and performance capabilities.   
-Partition count is not exposed directly, but we can infer the number of partitions several ways:
+Example:
+python3 -m dynamodb_lens.cli --table_name sentences1
+```
+
+## Table Analyzer 
+
+This library analyzes a table's current state, configuration and usage in order to:
+
+### TableAnalyzer class usage
+The class can be imported and called directly if the `dynamodb_lens.cli` doesn't fit the use case    
+The only required parameter is table_name, and optionally `verbose=True|False` plus already instantiated boto3 clients can be passed in.
+```python
+from dynamodb_lens.analyzer import TableAnalyzer
+
+table = TableAnalyzer(
+    table_name='foo',
+    verbose=False
+)
+table.save_output()
+```
+
+### 1. Estimate performance capabilities 
+A DynamoDB Table's current partition count as well as table settings will determine its performance capabilities.       
+Partition count is not exposed directly, but we can infer the number of partitions in several ways:
 1. Count the number of Open DynamoDB Stream shards, it is a 1:1 mapping of Open shards to Partitions
 2. Check cloudwatch max Provisioned settings over the last 3 months
 3. Check cloudwatch max WCU/RCU utilization over the last 1 month
-4. Check current WCU/RCU settings on the table if Provisioned mode is currently configured    
+4. Check current WCU/RCU settings on the table if Provisioned mode is currently configured   
+5. Check the current storage utilization of the table
 
-If Streams is not enabled, this program will estimate current number of partitions based on the maximum values 
-of #2-4 above.    
+If Streams is not enabled, this program will estimate current number of partitions based on the maximum WCU/RCU values 
+calculated from the data gathered in #2-5 above.    
 DynamoDB tables never give back partitions once they've been allocated.    
 This is what is meant by ["previous peak" in  the documentation](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadWriteCapacityMode.html#HowItWorks.ProvisionedThroughput.Manual).
 
