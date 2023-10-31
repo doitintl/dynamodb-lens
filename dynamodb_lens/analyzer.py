@@ -26,43 +26,43 @@ class TableAnalyzer:
             cw_client=return_boto3_client('cloudwatch'),
             verbose=False):
         self.table_name = table_name
-        self.lambda_client=lambda_client
-        self.ddbs_client = ddbs_client
-        self.ddb_client = ddb_client
-        self.cw_client = cw_client
-        self.verbose = verbose
-        self.table_desc = None
-        self.stream_desc = None
-        self.table_arn = None
-        self.stream_arn = None
-        self.size_in_bytes = None
-        self.size_in_mb = None
-        self.size_in_gb = None
-        self.item_count = None
-        self.ec_multiplier = 2
-        self.wcu_size_bytes = 1000
-        self.rcu_size_bytes = 4000
-        self.rcu_part_hard_limit = 3000
-        self.wcu_part_hard_limit = 1000
-        self.rcu_part_soft_limit = None
-        self.wcu_part_soft_limit = None
-        self.partitions = None
-        self.billing_mode = None
-        self.part_wcu = None
-        self.part_rcu = None
-        self.max_rcu = None
-        self.max_read_throughput_bytes = None
-        self.max_wcu = None
-        self.max_write_throughput_bytes = None
-        self.summary = None
-        self.detailed = None
         self.output = None
-        self.stream_enabled = None
-        self.deletion_protection = None
-        self.stream_open_shards = 0
-        self.stream_closed_shards = 0
-        self.stream_total_shards = 0
-        self.metrics_data = {
+        self._lambda_client = lambda_client
+        self._ddbs_client = ddbs_client
+        self._ddb_client = ddb_client
+        self._cw_client = cw_client
+        self._verbose = verbose
+        self._table_desc = None
+        self._stream_desc = None
+        self._table_arn = None
+        self._stream_arn = None
+        self._size_in_bytes = None
+        self._size_in_mb = None
+        self._size_in_gb = None
+        self._item_count = None
+        self._ec_multiplier = 2
+        self._wcu_size_bytes = 1000
+        self._rcu_size_bytes = 4000
+        self._rcu_part_hard_limit = 3000
+        self._wcu_part_hard_limit = 1000
+        self._rcu_part_soft_limit = None
+        self._wcu_part_soft_limit = None
+        self._partitions = None
+        self._billing_mode = None
+        self._part_wcu = None
+        self._part_rcu = None
+        self._max_rcu = None
+        self._max_read_throughput_bytes = None
+        self._max_wcu = None
+        self._max_write_throughput_bytes = None
+        self._summary = None
+        self._detailed = None
+        self._stream_enabled = None
+        self._deletion_protection = None
+        self._stream_open_shards = 0
+        self._stream_closed_shards = 0
+        self._stream_total_shards = 0
+        self._metrics_data = {
             'ConsumedWCU': {
                 'Timestamps': [],
                 'Values': []
@@ -80,168 +80,167 @@ class TableAnalyzer:
                 'Values': []
             }
         }
-        self.estimations_dict = {}
+        self._estimations_dict = {}
+        self._analyze_table()
 
-        logging.info(f'Working on table: {self.table_name}')
-        self.describe_table()
-        self.is_stream_enabled()
-        if self.stream_enabled:
-            logging.info(f'Describing stream: {self.stream_arn}. This can take a while on high performance tables.')
-            self.describe_stream()
+    def __str__(self):
+        return DESCRIPTION
+
+    def _analyze_table(self):
+        logging.info(f'Analyzing table: {self.table_name}')
+        self._describe_table()
+        self._is_stream_enabled()
+        if self._stream_enabled:
+            logging.info(f'Describing stream: {self._stream_arn}. This can take a while on high performance tables.')
+            self._describe_stream()
         logging.info(f'Pulling Cloudwatch metrics for table: {self.table_name}')
-        self.get_metric_data()
+        self._get_metric_data()
         logging.info(f'Crunching numbers...')
-        self.generate_estimations_data()
-        self.estimate_partitions()
-        self.estimate_maximums()
-        self.generate_summary()
-        if self.verbose:
-            self.generate_verbose()
-        self.generate_output()
+        self._generate_estimations_data()
+        self._estimate_partitions()
+        self._estimate_maximums()
+        self._generate_summary()
+        if self._verbose:
+            self._generate_verbose()
+        self._generate_output()
 
-    def is_stream_enabled(self):
-        self.stream_enabled = self.table_desc['StreamSpecification']['StreamEnabled'] \
-            if 'StreamSpecification' in self.table_desc else False
+    def _is_stream_enabled(self):
+        self._stream_enabled = self._table_desc['StreamSpecification']['StreamEnabled'] \
+            if 'StreamSpecification' in self._table_desc else False
 
-        if self.stream_enabled:
-            self.stream_arn = self.table_desc['LatestStreamArn']
+        if self._stream_enabled:
+            self._stream_arn = self._table_desc['LatestStreamArn']
         else:
             logging.warning(f'{self.table_name} does not have Streams enabled. \n{DESCRIPTION}')
 
-    def generate_summary(self):
-        self.summary = {
+    def _generate_summary(self):
+        self._summary = {
             'TableName': self.table_name,
-            'TableArn': self.table_arn,
-            'DeletionProtection': self.deletion_protection,
-            'SizeMB': self.size_in_mb,
-            'ItemCount': self.item_count,
-            'BillingMode': 'ON-DEMAND' if self.billing_mode == 'PAY_PER_REQUEST' else 'PROVISIONED',
+            'TableArn': self._table_arn,
+            'DeletionProtection': self._deletion_protection,
+            'SizeMB': self._size_in_mb,
+            'ItemCount': self._item_count,
+            'BillingMode': 'ON-DEMAND' if self._billing_mode == 'PAY_PER_REQUEST' else 'PROVISIONED',
         }
-        if self.billing_mode == 'PROVISIONED':
-            self.summary['ProvisionedThroughput'] = self.table_desc['ProvisionedThroughput']
+        if self._billing_mode == 'PROVISIONED':
+            self._summary['ProvisionedThroughput'] = self._table_desc['ProvisionedThroughput']
 
-        if 'GlobalSecondaryIndexes' in self.table_desc:
-            self.summary['NumGSI'] = len(self.table_desc['GlobalSecondaryIndexes'])
+        if 'GlobalSecondaryIndexes' in self._table_desc:
+            self._summary['NumGSI'] = len(self._table_desc['GlobalSecondaryIndexes'])
 
-        if 'LocalSecondaryIndexes' in self.table_desc:
-            self.summary['NumLSI'] = len(self.table_desc['GlobalSecondaryIndexes'])
+        if 'LocalSecondaryIndexes' in self._table_desc:
+            self._summary['NumLSI'] = len(self._table_desc['GlobalSecondaryIndexes'])
 
-        if 'NumLSI' in self.table_desc or 'NumGSI' in self.table_desc:
-            self.summary['IndexWarning'] = 'TODO: Indexes should be examined as well, but are not yet implemented in this program.'
-            logging.warning(self.summary['IndexWarning'])
+        if 'NumLSI' in self._table_desc or 'NumGSI' in self._table_desc:
+            self._summary['IndexWarning'] = 'TODO: Indexes should be examined as well, but are not yet implemented in this program.'
+            logging.warning(self._summary['IndexWarning'])
 
-        if self.stream_enabled:
-            self.summary['StreamArn'] = self.stream_arn
-        self.summary['Estimations'] = self.estimations_dict['Results']
+        if self._stream_enabled:
+            self._summary['StreamArn'] = self._stream_arn
+        self._summary['Estimations'] = self._estimations_dict['Results']
 
-    def generate_verbose(self):
-        self.detailed = {
-            "TableDescription": self.table_desc,
-            "StreamDescription": self.stream_desc,
-            "EstimationData": self.estimations_dict['Data'],
-            "AnalyzerSummary": self.summary,
+    def _generate_verbose(self):
+        self._detailed = {
+            "TableDescription": self._table_desc,
+            "StreamDescription": self._stream_desc,
+            "EstimationData": self._estimations_dict['Data'],
+            "AnalyzerSummary": self._summary,
         }
 
-    def describe_table(self):
-        self.table_desc = self.ddb_client.describe_table(TableName=self.table_name)["Table"]
-        self.table_arn = self.table_desc['TableArn']
-        self.size_in_bytes = self.table_desc['TableSizeBytes']
-        self.size_in_mb = ceil(self.size_in_bytes/1024/1000) if self.size_in_bytes > 1024000 else 1
-        self.size_in_gb = ceil(self.size_in_bytes/1024/1000/1000) if self.size_in_bytes > 1024000000 else 1
-        self.item_count = self.table_desc['ItemCount']
-        if 'BillingModeSummary' in self.table_desc:
-            self.billing_mode = self.table_desc['BillingModeSummary']['BillingMode']
+    def _describe_table(self):
+        self._table_desc = self._ddb_client.describe_table(TableName=self.table_name)["Table"]
+        self._table_arn = self._table_desc['TableArn']
+        self._size_in_bytes = self._table_desc['TableSizeBytes']
+        self._size_in_mb = ceil(self._size_in_bytes/1024/1000) if self._size_in_bytes > 1024000 else 1
+        self._size_in_gb = ceil(self._size_in_bytes/1024/1000/1000) if self._size_in_bytes > 1024000000 else 1
+        self._item_count = self._table_desc['ItemCount']
+        if 'BillingModeSummary' in self._table_desc:
+            self._billing_mode = self._table_desc['BillingModeSummary']['BillingMode']
         else:
-            self.billing_mode = 'PROVISIONED'
-        self.deletion_protection = self.table_desc['DeletionProtectionEnabled']
-        if not self.deletion_protection:
+            self._billing_mode = 'PROVISIONED'
+        self._deletion_protection = self._table_desc['DeletionProtectionEnabled']
+        if not self._deletion_protection:
             logging.warning(f'Deletion protection is not enabled for {self.table_name}')
 
-    def count_shards(self, stream_desc):
-        self.stream_total_shards += len(stream_desc['Shards'])
+    def _count_shards(self, stream_desc):
+        self._stream_total_shards += len(stream_desc['Shards'])
         for s in stream_desc['Shards']:
             if 'EndingSequenceNumber' in s['SequenceNumberRange']:
-                self.stream_closed_shards += 1
+                self._stream_closed_shards += 1
             else:
-                self.stream_open_shards += 1
-        logging.info(f'Open: {self.stream_open_shards}, Closed: {self.stream_closed_shards}, Total: {self.stream_total_shards}')
+                self._stream_open_shards += 1
+        logging.info(f'Open: {self._stream_open_shards}, Closed: {self._stream_closed_shards}, Total: {self._stream_total_shards}')
 
-    def describe_stream(self):
+    def _describe_stream(self):
         kwargs = {
-            "StreamArn": self.stream_arn
+            "StreamArn": self._stream_arn
         }
 
-        self.stream_desc = self.ddbs_client.describe_stream(**kwargs)['StreamDescription']
-        self.count_shards(stream_desc=self.stream_desc)
-        last_shard_id = self.stream_desc['LastEvaluatedShardId'] if 'LastEvaluatedShardId' in self.stream_desc else None
-        logging.info(f'Stream: {self.stream_arn} LastEvaluatedShardId: {last_shard_id}')
+        self._stream_desc = self._ddbs_client.describe_stream(**kwargs)['StreamDescription']
+        self._count_shards(stream_desc=self._stream_desc)
+        last_shard_id = self._stream_desc['LastEvaluatedShardId'] if 'LastEvaluatedShardId' in self._stream_desc else None
+        logging.info(f'Stream: {self._stream_arn} LastEvaluatedShardId: {last_shard_id}')
 
         if last_shard_id is not None:
             while last_shard_id is not None:
                 kwargs['ExclusiveStartShardId'] = last_shard_id
-                stream_desc = self.ddbs_client.describe_stream(**kwargs)['StreamDescription']
+                stream_desc = self._ddbs_client.describe_stream(**kwargs)['StreamDescription']
                 last_shard_id = stream_desc['LastEvaluatedShardId'] if 'LastEvaluatedShardId' in stream_desc else None
-                self.count_shards(stream_desc=stream_desc)
-                logging.info(f'Stream: {self.stream_arn} LastEvaluatedShardId: {last_shard_id}')
+                self._count_shards(stream_desc=stream_desc)
+                logging.info(f'Stream: {self._stream_arn} LastEvaluatedShardId: {last_shard_id}')
 
-            del self.stream_desc['LastEvaluatedShardId']
+            del self._stream_desc['LastEvaluatedShardId']
 
-        self.stream_desc['Shards'] = {
-            'Open': self.stream_open_shards,
-            'Closed': self.stream_closed_shards,
-            'Total': self.stream_total_shards
+        self._stream_desc['Shards'] = {
+            'Open': self._stream_open_shards,
+            'Closed': self._stream_closed_shards,
+            'Total': self._stream_total_shards
         }
 
-    def generate_estimations_data(self):
-        self.estimations_dict = {
+    def _generate_estimations_data(self):
+        self._estimations_dict = {
             "Data": {
                 "Description": "Raw estimation data used for debugging purposes only!",
                 "WCU": {
-                    "CurrentProvisionedWCU": self.table_desc['ProvisionedThroughput']['WriteCapacityUnits'],
-                    "MaxConsumedWCU": self.metrics_data['MaxConsumedWCU'],
-                    "MaxProvisionedWCU": self.metrics_data['MaxProvisionedWCU']
+                    "CurrentProvisionedWCU": self._table_desc['ProvisionedThroughput']['WriteCapacityUnits'],
+                    "MaxConsumedWCU": self._metrics_data['MaxConsumedWCU'],
+                    "MaxProvisionedWCU": self._metrics_data['MaxProvisionedWCU']
                 },
                 "RCU": {
-                    "CurrentProvisionedRCU": self.table_desc['ProvisionedThroughput']['ReadCapacityUnits'],
-                    "MaxConsumedRCU": self.metrics_data['MaxConsumedRCU'],
-                    "MaxProvisionedRCU": self.metrics_data['MaxProvisionedRCU']
+                    "CurrentProvisionedRCU": self._table_desc['ProvisionedThroughput']['ReadCapacityUnits'],
+                    "MaxConsumedRCU": self._metrics_data['MaxConsumedRCU'],
+                    "MaxProvisionedRCU": self._metrics_data['MaxProvisionedRCU']
                 },
                 "Partitions": {}
             },
             "Results": {}
         }
 
-        max_wcu_key = max(self.estimations_dict['Data']['WCU'], key=self.estimations_dict['Data']['WCU'].get)
-        max_rcu_key = max(self.estimations_dict['Data']['RCU'], key=self.estimations_dict['Data']['RCU'].get)
+        max_wcu_key = max(self._estimations_dict['Data']['WCU'], key=self._estimations_dict['Data']['WCU'].get)
+        max_rcu_key = max(self._estimations_dict['Data']['RCU'], key=self._estimations_dict['Data']['RCU'].get)
 
-        max_wcu_parts = ceil(self.estimations_dict['Data']['WCU'][max_wcu_key] / self.wcu_part_hard_limit)
-        max_rcu_parts = ceil(self.estimations_dict['Data']['RCU'][max_rcu_key] / self.rcu_part_hard_limit)
+        max_wcu_parts = ceil(self._estimations_dict['Data']['WCU'][max_wcu_key] / self._wcu_part_hard_limit)
+        max_rcu_parts = ceil(self._estimations_dict['Data']['RCU'][max_rcu_key] / self._rcu_part_hard_limit)
 
-        self.estimations_dict['Data']['Partitions'] = {
+        self._estimations_dict['Data']['Partitions'] = {
             max_wcu_key: max_wcu_parts if max_wcu_parts > 0 else 1,
             max_rcu_key: max_rcu_parts if max_rcu_parts > 0 else 1,
-            'CurrentTableSize': ceil(self.size_in_gb/10) if self.size_in_gb > 0 else 1
+            'CurrentTableSize': ceil(self._size_in_gb/10) if self._size_in_gb > 0 else 1
         }
 
-    def estimate_partitions(self):
+    def _estimate_partitions(self):
         # If the table has streams enabled, we can assume the number of open shards = partitions
-        if self.stream_enabled:
-            self.partitions = self.stream_open_shards
-            self.estimations_dict['Results']['EstimationMethod'] = 'StreamOpenShards'
-            self.estimations_dict['Results']['EstimationMethodDescription'] = 'Using number of open shards in the DynamoDB Stream, we can assume a 1:1 mapping to partitions'
+        if self._stream_enabled:
+            self._partitions = self._stream_open_shards
+            self._estimations_dict['Results']['EstimationMethod'] = 'StreamOpenShards'
+            self._estimations_dict['Results']['EstimationMethodDescription'] = 'Using number of open shards in the DynamoDB Stream, we can assume a 1:1 mapping to partitions'
 
         # If streams are not enabled, we need to examine a few things in order to determine the number of partitions
-        # 1. If Provisioned, current capacity settings
-        # 2. Previous RCU/WCU Consumption (30 days)
-        # 3. Previous RCU/WCU Provisioned (90 days)
-        # The greater of these numbers will be used to determine number of partitions
-        # NOTE: This method is only as accurate as the data we have access to.
-        #       EG: If there was a major scale-up event more than 90 days ago we will not be able to factor it in
         else:
-            max_parts_key = max(self.estimations_dict['Data']['Partitions'], key=self.estimations_dict['Data']['Partitions'].get)
+            max_parts_key = max(self._estimations_dict['Data']['Partitions'], key=self._estimations_dict['Data']['Partitions'].get)
 
-            self.estimations_dict['Results']['EstimationMethod'] = max_parts_key
-            self.estimations_dict['Results']['EstimationMethodDescription'] = \
+            self._estimations_dict['Results']['EstimationMethod'] = max_parts_key
+            self._estimations_dict['Results']['EstimationMethodDescription'] = \
                 f"""{max_parts_key} was used to estimate number of partitions. 
                 This value was chosen because it is the highest value from the data examined and DynamoDB tables never
                 give back partitions once they've been allocated.
@@ -249,61 +248,61 @@ class TableAnalyzer:
                 and then multiplying by 2; based on the assumption that DynamoDB is always ready to double the workload.
                 """
 
-            self.partitions = self.estimations_dict['Data']['Partitions'][max_parts_key] * 2
+            self._partitions = self._estimations_dict['Data']['Partitions'][max_parts_key] * 2
             # handle edge case for low utilization tables
-            if self.partitions < 4 and self.billing_mode == 'PAY_PER_REQUEST':
-                self.estimations_dict['Results']['EstimationMethod'] = 'OnDemandBaseSpecs'
-                self.estimations_dict['Results']['EstimationMethodDescription'] = \
+            if self._partitions < 4 and self._billing_mode == 'PAY_PER_REQUEST':
+                self._estimations_dict['Results']['EstimationMethod'] = 'OnDemandBaseSpecs'
+                self._estimations_dict['Results']['EstimationMethodDescription'] = \
                     f"On-Demand Tables initially have 4 partitions and there is no data that indicates a scaling event."
-                self.partitions = 4
+                self._partitions = 4
 
-    def estimate_maximums(self):
+    def _estimate_maximums(self):
         # On-Demand tables will be able to use the fully allocated previous peak capacity and partition hard limits
-        if self.billing_mode == 'PAY_PER_REQUEST':
+        if self._billing_mode == 'PAY_PER_REQUEST':
             part_comments = 'On-Demand will allow each partition to use full capacity'
-            rcu_part_limit = self.rcu_part_hard_limit
-            wcu_part_limit = self.wcu_part_hard_limit
-            self.max_rcu = self.partitions * self.rcu_part_hard_limit
-            self.max_wcu = self.partitions * self.wcu_part_hard_limit
+            rcu_part_limit = self._rcu_part_hard_limit
+            wcu_part_limit = self._wcu_part_hard_limit
+            self._max_rcu = self._partitions * self._rcu_part_hard_limit
+            self._max_wcu = self._partitions * self._wcu_part_hard_limit
 
         # Provisioned will be able to use, well, whatever is provisioned / partitions
         else:
             part_comments = f'Adaptive capacity will allow individual partitions to burst higher (up to per-partition limit or table limit, whichever is lower) based on WCU/RCU'
-            if self.estimations_dict['Results']['EstimationMethod'] not in ['CurrentProvisionedWCU', 'CurrentProvisionedRCU']:
-                previous_est_method = self.estimations_dict['Results']['EstimationMethod']
-                self.estimations_dict['Results']['EstimationMethodDescription'] = f"""
-                {previous_est_method} data indicates there are ~{self.partitions} Partitions. However, {self.table_name}'s
-                current {self.billing_mode} capacity settings are limiting the overall throughput of the table and
+            if self._estimations_dict['Results']['EstimationMethod'] not in ['CurrentProvisionedWCU', 'CurrentProvisionedRCU']:
+                previous_est_method = self._estimations_dict['Results']['EstimationMethod']
+                self._estimations_dict['Results']['EstimationMethodDescription'] = f"""
+                {previous_est_method} data indicates there are ~{self._partitions} Partitions. However, {self.table_name}'s
+                current {self._billing_mode} capacity settings are limiting the overall throughput of the table and
                 partitions.
                 """
-                self.estimations_dict['Results']['EstimationMethod'] = 'CurrentProvisionedThroughput'
+                self._estimations_dict['Results']['EstimationMethod'] = 'CurrentProvisionedThroughput'
 
-            self.max_rcu = self.table_desc['ProvisionedThroughput']['ReadCapacityUnits']
-            self.max_wcu = self.table_desc['ProvisionedThroughput']['WriteCapacityUnits']
+            self._max_rcu = self._table_desc['ProvisionedThroughput']['ReadCapacityUnits']
+            self._max_wcu = self._table_desc['ProvisionedThroughput']['WriteCapacityUnits']
 
-            self.rcu_part_soft_limit = ceil(self.max_rcu / self.partitions)
-            self.wcu_part_soft_limit = ceil(self.max_wcu / self.partitions)
-            rcu_part_limit = self.rcu_part_soft_limit
-            wcu_part_limit = self.wcu_part_soft_limit
+            self._rcu_part_soft_limit = ceil(self._max_rcu / self._partitions)
+            self._wcu_part_soft_limit = ceil(self._max_wcu / self._partitions)
+            rcu_part_limit = self._rcu_part_soft_limit
+            wcu_part_limit = self._wcu_part_soft_limit
 
-        self.max_read_throughput_bytes = self.max_rcu * self.rcu_size_bytes
-        self.max_write_throughput_bytes = self.max_wcu * self.wcu_size_bytes
+        self._max_read_throughput_bytes = self._max_rcu * self._rcu_size_bytes
+        self._max_write_throughput_bytes = self._max_wcu * self._wcu_size_bytes
 
-        part_read_mbs = ceil((self.max_read_throughput_bytes / 1000000) / self.partitions)
-        part_write_mbs = ceil((self.max_write_throughput_bytes / 1000000) / self.partitions)
+        part_read_mbs = ceil((self._max_read_throughput_bytes / 1000000) / self._partitions)
+        part_write_mbs = ceil((self._max_write_throughput_bytes / 1000000) / self._partitions)
 
-        self.estimations_dict['Results'].update({
-            'Partitions': self.partitions,
+        self._estimations_dict['Results'].update({
+            'Partitions': self._partitions,
             'TableMaximums': {
-                'WCU': self.max_wcu,
-                'WriteThroughputMBs': ceil(self.max_write_throughput_bytes / 1000000),
+                'WCU': self._max_wcu,
+                'WriteThroughputMBs': ceil(self._max_write_throughput_bytes / 1000000),
                 'RCU': {
-                    'Base': self.max_rcu,
-                    'EventuallyConsistent': self.max_rcu * self.ec_multiplier
+                    'Base': self._max_rcu,
+                    'EventuallyConsistent': self._max_rcu * self._ec_multiplier
                 },
                 'ReadThroughputMBs': {
-                    'Base': ceil(self.max_read_throughput_bytes / 1000000),
-                    'EventuallyConsistent': ceil(self.max_read_throughput_bytes / 1000000) * self.ec_multiplier
+                    'Base': ceil(self._max_read_throughput_bytes / 1000000),
+                    'EventuallyConsistent': ceil(self._max_read_throughput_bytes / 1000000) * self._ec_multiplier
                 }
             },
             'PartitionMaximums': {
@@ -312,25 +311,28 @@ class TableAnalyzer:
                 'WriteThroughputMBs': part_write_mbs,
                 'RCU': {
                     'Base': rcu_part_limit,
-                    'EventuallyConsistent': rcu_part_limit * self.ec_multiplier
+                    'EventuallyConsistent': rcu_part_limit * self._ec_multiplier
                 },
                 'ReadThroughputMBs': {
                     'Base': part_read_mbs,
-                    'EventuallyConsistent': part_read_mbs * self.ec_multiplier
+                    'EventuallyConsistent': part_read_mbs * self._ec_multiplier
                 }
             }
         })
 
-    def generate_output(self):
-        if self.verbose:
-            self.output = json_dumps_iso(self.detailed)
+    def _generate_output(self):
+        if self._verbose:
+            self.output = json_dumps_iso(self._detailed)
         else:
-            self.output = json_dumps_iso(self.summary)
+            self.output = json_dumps_iso(self._summary)
 
-    def get_metric_data(self, consumed_s=900, provisioned_s=3600):
+    def print_output(self):
+        print(self.output)
+
+    def _get_metric_data(self, consumed_s=900, provisioned_s=3600):
         start_time = datetime.today() - timedelta(days=91)
         end_time = datetime.today() - timedelta(days=1)
-        cw_paginator = self.cw_client.get_paginator('get_metric_data')
+        cw_paginator = self._cw_client.get_paginator('get_metric_data')
 
         pages = cw_paginator.paginate(
             MetricDataQueries=[
@@ -420,26 +422,26 @@ class TableAnalyzer:
                 if results['Id'] == 'cwcu':
                     if len(results['Values']) > 0:
                         max_cwcu_per_period.append(max(results['Values']))
-                        self.metrics_data['ConsumedWCU']['Timestamps'].extend(results['Timestamps'])
-                        self.metrics_data['ConsumedWCU']['Values'].extend(results['Values'])
+                        self._metrics_data['ConsumedWCU']['Timestamps'].extend(results['Timestamps'])
+                        self._metrics_data['ConsumedWCU']['Values'].extend(results['Values'])
                 elif results['Id'] == 'crcu':
                     if len(results['Values']) > 0:
                         max_crcu_per_period.append(max(results['Values']))
-                        self.metrics_data['ConsumedRCU']['Timestamps'].extend(results['Timestamps'])
-                        self.metrics_data['ConsumedRCU']['Values'].extend(results['Values'])
+                        self._metrics_data['ConsumedRCU']['Timestamps'].extend(results['Timestamps'])
+                        self._metrics_data['ConsumedRCU']['Values'].extend(results['Values'])
                 elif results['Id'] == 'pwcu':
                     if len(results['Values']) > 0:
                         max_pwcu_per_period.append(max(results['Values']))
-                        self.metrics_data['ProvisionedWCU']['Timestamps'].extend(results['Timestamps'])
-                        self.metrics_data['ProvisionedWCU']['Values'].extend(results['Values'])
+                        self._metrics_data['ProvisionedWCU']['Timestamps'].extend(results['Timestamps'])
+                        self._metrics_data['ProvisionedWCU']['Values'].extend(results['Values'])
                 elif results['Id'] == 'prcu':
                     if len(results['Values']) > 0:
                         max_prcu_per_period.append(max(results['Values']))
-                        self.metrics_data['ProvisionedRCU']['Timestamps'].extend(results['Timestamps'])
-                        self.metrics_data['ProvisionedRCU']['Values'].extend(results['Values'])
+                        self._metrics_data['ProvisionedRCU']['Timestamps'].extend(results['Timestamps'])
+                        self._metrics_data['ProvisionedRCU']['Values'].extend(results['Values'])
 
-        self.metrics_data['MaxConsumedWCU'] = ceil(max(max_cwcu_per_period)/consumed_s)
-        self.metrics_data['MaxConsumedRCU'] = ceil(max(max_crcu_per_period)/consumed_s)
-        self.metrics_data['MaxProvisionedWCU'] = ceil(max(max_pwcu_per_period)) if len(max_pwcu_per_period) > 0 else 0
-        self.metrics_data['MaxProvisionedRCU'] = ceil(max(max_prcu_per_period)) if len(max_prcu_per_period) > 0 else 0
-        logging.debug(self.metrics_data)
+        self._metrics_data['MaxConsumedWCU'] = ceil(max(max_cwcu_per_period)/consumed_s)
+        self._metrics_data['MaxConsumedRCU'] = ceil(max(max_crcu_per_period)/consumed_s)
+        self._metrics_data['MaxProvisionedWCU'] = ceil(max(max_pwcu_per_period)) if len(max_pwcu_per_period) > 0 else 0
+        self._metrics_data['MaxProvisionedRCU'] = ceil(max(max_prcu_per_period)) if len(max_prcu_per_period) > 0 else 0
+        logging.debug(self._metrics_data)

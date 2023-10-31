@@ -31,7 +31,7 @@ def main():
     verbose = args.verbose
 
     table = TableAnalyzer(table_name, verbose=verbose)
-    print(table.output)
+    table.print_output()
     if args.save_output:
         outfile_name = write_output(output=table.output, filename=f'table_analyzer_{table_name}')
         logging.info(f'Output saved to {outfile_name}')
