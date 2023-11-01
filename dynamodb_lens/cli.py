@@ -18,8 +18,8 @@ parser = argparse.ArgumentParser(
 )
 
 parser.add_argument("--table_name", required=True)
-parser.add_argument("--save_output", action='store_true', help="save the json formatted output to a file")
-parser.add_argument("--verbose", action='store_true', help="Print the full output, otherwise a summary will be printed")
+parser.add_argument("--save_analysis", action='store_true', help="save the json formatted analysis to a file")
+parser.add_argument("--verbose", action='store_true', help="Print the full analysis, otherwise a summary will be printed")
 args = parser.parse_args()
 
 
@@ -31,10 +31,10 @@ def main():
     verbose = args.verbose
 
     table = TableAnalyzer(table_name, verbose=verbose)
-    table.print_output()
-    if args.save_output:
-        outfile_name = write_output(output=table.output, filename=f'table_analyzer_{table_name}')
-        logging.info(f'Output saved to {outfile_name}')
+    table.print_analysis()
+    if args.save_analysis:
+        outfile_name = write_output(output=table.analysis, filename=f'table_analyzer_{table_name}')
+        logging.info(f'Analysis saved to {outfile_name}')
 
 
 if __name__ == '__main__':

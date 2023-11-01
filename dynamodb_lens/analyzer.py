@@ -26,7 +26,7 @@ class TableAnalyzer:
             cw_client=return_boto3_client('cloudwatch'),
             verbose=False):
         self.table_name = table_name
-        self.output = None
+        self.analysis = None
         self._lambda_client = lambda_client
         self._ddbs_client = ddbs_client
         self._ddb_client = ddb_client
@@ -56,7 +56,6 @@ class TableAnalyzer:
         self._max_wcu = None
         self._max_write_throughput_bytes = None
         self._summary = None
-        self._detailed = None
         self._stream_enabled = None
         self._deletion_protection = None
         self._stream_open_shards = 0
@@ -100,9 +99,7 @@ class TableAnalyzer:
         self._estimate_partitions()
         self._estimate_maximums()
         self._generate_summary()
-        if self._verbose:
-            self._generate_verbose()
-        self._generate_output()
+        self._generate_analysis()
 
     def _is_stream_enabled(self):
         self._stream_enabled = self._table_desc['StreamSpecification']['StreamEnabled'] \
@@ -115,12 +112,12 @@ class TableAnalyzer:
 
     def _generate_summary(self):
         self._summary = {
-            'TableName': self.table_name,
-            'TableArn': self._table_arn,
-            'DeletionProtection': self._deletion_protection,
-            'SizeMB': self._size_in_mb,
-            'ItemCount': self._item_count,
-            'BillingMode': 'ON-DEMAND' if self._billing_mode == 'PAY_PER_REQUEST' else 'PROVISIONED',
+            "TableName": self.table_name,
+            "TableArn": self._table_arn,
+            "DeletionProtection": self._deletion_protection,
+            "SizeMB": self._size_in_mb,
+            "ItemCount": self._item_count,
+            "BillingMode": "ON-DEMAND" if self._billing_mode == "PAY_PER_REQUEST" else "PROVISIONED"
         }
         if self._billing_mode == 'PROVISIONED':
             self._summary['ProvisionedThroughput'] = self._table_desc['ProvisionedThroughput']
@@ -138,14 +135,6 @@ class TableAnalyzer:
         if self._stream_enabled:
             self._summary['StreamArn'] = self._stream_arn
         self._summary['Estimations'] = self._estimations_dict['Results']
-
-    def _generate_verbose(self):
-        self._detailed = {
-            "TableDescription": self._table_desc,
-            "StreamDescription": self._stream_desc,
-            "EstimationData": self._estimations_dict['Data'],
-            "AnalyzerSummary": self._summary,
-        }
 
     def _describe_table(self):
         self._table_desc = self._ddb_client.describe_table(TableName=self.table_name)["Table"]
@@ -320,14 +309,23 @@ class TableAnalyzer:
             }
         })
 
-    def _generate_output(self):
+    def _generate_analysis(self):
         if self._verbose:
-            self.output = json_dumps_iso(self._detailed)
+            analysis = {
+                "TableDescription": self._table_desc,
+                "StreamDescription": self._stream_desc,
+                "EstimationData": self._estimations_dict['Data'],
+                "Summary": self._summary
+            }
         else:
-            self.output = json_dumps_iso(self._summary)
+            analysis = {
+                "Summary": self._summary
+            }
 
-    def print_output(self):
-        print(self.output)
+        self.analysis = json_dumps_iso(analysis)
+
+    def print_analysis(self):
+        print(self.analysis)
 
     def _get_metric_data(self, consumed_s=900, provisioned_s=3600):
         start_time = datetime.today() - timedelta(days=91)
