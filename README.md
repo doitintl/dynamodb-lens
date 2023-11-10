@@ -10,15 +10,16 @@ python3 -m pip install dynamodb-lens
 ```
 ### CLI usage
 ```shell
-usage: dynamodb_lens.cli [-h] --table_name TABLE_NAME [--save_output] [--verbose]
-optional arguments:
+usage: cli [-h] --table_name TABLE_NAME [--metric_consumed_period_s METRIC_CONSUMED_PERIOD_S] [--save_analysis] [--verbose]
+
+options:
   -h, --help            show this help message and exit
   --table_name TABLE_NAME
-  --save_analysis         save the json formatted analysis to a file
+  --metric_consumed_period_s METRIC_CONSUMED_PERIOD_S
+                        The cloudwatch metric period for consumed WCU/RCU
+  --save_analysis       save the json formatted analysis to a file
   --verbose             Print the full analysis, otherwise a summary will be printed
-
-Example:
-python3 -m dynamodb_lens.cli --table_name sentences1
+python3 -m dynamodb_lens.cli --table_name sentences1 --metric_consumed_period_s 60 --verbose --save_analysis
 ```
 
 ## Table Analyzer 
@@ -28,7 +29,7 @@ A DynamoDB Table's current partition count as well as table settings will determ
 Partition count is not exposed directly, but we can infer the number of partitions in several ways:
 1. Count the number of Open DynamoDB Stream shards, it is a 1:1 mapping of Open shards to Partitions
 2. Check cloudwatch max Provisioned settings over the last 3 months
-3. Check cloudwatch max WCU/RCU utilization over the last 1 month
+3. Check cloudwatch max consumed WCU/RCU over the last 1 month (more accurate if consumed_period_s set to 60)
 4. Check current WCU/RCU settings on the table if Provisioned mode is currently configured   
 5. Check the current storage utilization of the table
 
@@ -55,9 +56,15 @@ The only required parameter is table_name, and optionally `verbose=True|False` p
 
 ```python
 from dynamodb_lens.analyzer import TableAnalyzer
+from dynamodb_lens.utils import return_boto3_client
 
 table = TableAnalyzer(
     table_name='foo',
+    consumed_period_s=60,
+    lambda_client=return_boto3_client('lambda'),
+    ddbs_client=return_boto3_client('dynamodbstreams'),
+    ddb_client=return_boto3_client('dynamodb'),
+    cw_client=return_boto3_client('cloudwatch'),
     verbose=False
 )
 table.print_analysis()
