@@ -11,7 +11,10 @@ Partition count is not exposed directly, but we can infer the number of partitio
 If Streams is not enabled, this program will estimate current number of partitions based on the maximum WCU/RCU values 
 calculated from the data gathered.    
 
-***This program is more accurate if DynamoDB Streams is enabled for the table.***   
+***This program is more accurate when***
+ 1. DynamoDB Streams is enabled for the table
+ 2. The table's peak usage happened within the past 2 weeks
+    - If so, consumed_period_s can be set to 60 to get more precise data from Cloudwatch   
 Please view the README for more details.
 '''
 
@@ -20,12 +23,14 @@ class TableAnalyzer:
     def __init__(
             self,
             table_name,
+            consumed_period_s=900,
             lambda_client=return_boto3_client('lambda'),
             ddbs_client=return_boto3_client('dynamodbstreams'),
             ddb_client=return_boto3_client('dynamodb'),
             cw_client=return_boto3_client('cloudwatch'),
             verbose=False):
         self.table_name = table_name
+        self.consumed_period_s = consumed_period_s
         self.analysis = None
         self._lambda_client = lambda_client
         self._ddbs_client = ddbs_client
@@ -283,14 +288,18 @@ class TableAnalyzer:
         self._estimations_dict['Results'].update({
             'Partitions': self._partitions,
             'TableMaximums': {
-                'WCU': self._max_wcu,
+                'WCU': {
+                    'Standard': self._max_wcu,
+                    'Consumed': self._metrics_data['MaxConsumedWCU']
+                },
                 'WriteThroughputMBs': ceil(self._max_write_throughput_bytes / 1000000),
                 'RCU': {
-                    'Base': self._max_rcu,
-                    'EventuallyConsistent': self._max_rcu * self._ec_multiplier
+                    'StronglyConsistent': self._max_rcu,
+                    'EventuallyConsistent': self._max_rcu * self._ec_multiplier,
+                    'Consumed': self._metrics_data['MaxConsumedRCU']
                 },
                 'ReadThroughputMBs': {
-                    'Base': ceil(self._max_read_throughput_bytes / 1000000),
+                    'StronglyConsistent': ceil(self._max_read_throughput_bytes / 1000000),
                     'EventuallyConsistent': ceil(self._max_read_throughput_bytes / 1000000) * self._ec_multiplier
                 }
             },
@@ -299,11 +308,11 @@ class TableAnalyzer:
                 'WCU': wcu_part_limit,
                 'WriteThroughputMBs': part_write_mbs,
                 'RCU': {
-                    'Base': rcu_part_limit,
+                    'StronglyConsistent': rcu_part_limit,
                     'EventuallyConsistent': rcu_part_limit * self._ec_multiplier
                 },
                 'ReadThroughputMBs': {
-                    'Base': part_read_mbs,
+                    'StronglyConsistent': part_read_mbs,
                     'EventuallyConsistent': part_read_mbs * self._ec_multiplier
                 }
             }
@@ -327,7 +336,7 @@ class TableAnalyzer:
     def print_analysis(self):
         print(self.analysis)
 
-    def _get_metric_data(self, consumed_s=900, provisioned_s=3600):
+    def _get_metric_data(self, provisioned_s=3600):
         start_time = datetime.today() - timedelta(days=91)
         end_time = datetime.today() - timedelta(days=1)
         cw_paginator = self._cw_client.get_paginator('get_metric_data')
@@ -347,7 +356,7 @@ class TableAnalyzer:
                                 },
                             ]
                         },
-                        'Period': consumed_s,
+                        'Period': self.consumed_period_s,
                         'Stat': 'Sum'
                     },
                     'ReturnData': True
@@ -365,7 +374,7 @@ class TableAnalyzer:
                                 },
                             ]
                         },
-                        'Period': consumed_s,
+                        'Period': self.consumed_period_s,
                         'Stat': 'Sum'
                     },
                     'ReturnData': True
@@ -438,8 +447,8 @@ class TableAnalyzer:
                         self._metrics_data['ProvisionedRCU']['Timestamps'].extend(results['Timestamps'])
                         self._metrics_data['ProvisionedRCU']['Values'].extend(results['Values'])
 
-        self._metrics_data['MaxConsumedWCU'] = ceil(max(max_cwcu_per_period)/consumed_s)
-        self._metrics_data['MaxConsumedRCU'] = ceil(max(max_crcu_per_period)/consumed_s)
+        self._metrics_data['MaxConsumedWCU'] = ceil(max(max_cwcu_per_period)/self.consumed_period_s)
+        self._metrics_data['MaxConsumedRCU'] = ceil(max(max_crcu_per_period)/self.consumed_period_s)
         self._metrics_data['MaxProvisionedWCU'] = ceil(max(max_pwcu_per_period)) if len(max_pwcu_per_period) > 0 else 0
         self._metrics_data['MaxProvisionedRCU'] = ceil(max(max_prcu_per_period)) if len(max_prcu_per_period) > 0 else 0
         logging.debug(self._metrics_data)

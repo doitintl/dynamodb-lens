@@ -18,6 +18,7 @@ parser = argparse.ArgumentParser(
 )
 
 parser.add_argument("--table_name", required=True)
+parser.add_argument("--metric_consumed_period_s", type=int, default=900, help="The cloudwatch metric period for consumed WCU/RCU")
 parser.add_argument("--save_analysis", action='store_true', help="save the json formatted analysis to a file")
 parser.add_argument("--verbose", action='store_true', help="Print the full analysis, otherwise a summary will be printed")
 args = parser.parse_args()
@@ -29,11 +30,13 @@ def main():
     """
     table_name = args.table_name
     verbose = args.verbose
+    consumed_period_s = args.metric_consumed_period_s
 
-    table = TableAnalyzer(table_name, verbose=verbose)
+    table = TableAnalyzer(table_name, verbose=verbose, consumed_period_s=consumed_period_s)
     table.print_analysis()
     if args.save_analysis:
-        outfile_name = write_output(output=table.analysis, filename=f'table_analyzer_{table_name}')
+        descriptor = 'verbose' if verbose else 'summary'
+        outfile_name = write_output(output=table.analysis, filename=f'table_analyzer_{table_name}_{descriptor}')
         logging.info(f'Analysis saved to {outfile_name}')
 
 
