@@ -95,8 +95,9 @@ class TableAnalyzer:
         self._describe_table()
         self._is_stream_enabled()
         if self._stream_enabled:
-            logging.info(f'Describing stream: {self._stream_arn}. This can take a while on high performance tables.')
+            logging.info(f'Describing stream: {self._stream_arn}. This can take a while on tables with many partitions.')
             self._describe_stream()
+            logging.info(f'Shard summary - Open: {self._stream_open_shards}, Closed: {self._stream_closed_shards}, Total: {self._stream_total_shards}')
         logging.info(f'Pulling Cloudwatch metrics for table: {self.table_name}')
         self._get_metric_data()
         logging.info(f'Crunching numbers...')
@@ -163,7 +164,6 @@ class TableAnalyzer:
                 self._stream_closed_shards += 1
             else:
                 self._stream_open_shards += 1
-        logging.info(f'Open: {self._stream_open_shards}, Closed: {self._stream_closed_shards}, Total: {self._stream_total_shards}')
 
     def _describe_stream(self):
         kwargs = {
@@ -173,7 +173,7 @@ class TableAnalyzer:
         self._stream_desc = self._ddbs_client.describe_stream(**kwargs)['StreamDescription']
         self._count_shards(stream_desc=self._stream_desc)
         last_shard_id = self._stream_desc['LastEvaluatedShardId'] if 'LastEvaluatedShardId' in self._stream_desc else None
-        logging.info(f'Stream: {self._stream_arn} LastEvaluatedShardId: {last_shard_id}')
+        logging.debug(f'Stream: {self._stream_arn} LastEvaluatedShardId: {last_shard_id}')
 
         if last_shard_id is not None:
             while last_shard_id is not None:
@@ -181,7 +181,7 @@ class TableAnalyzer:
                 stream_desc = self._ddbs_client.describe_stream(**kwargs)['StreamDescription']
                 last_shard_id = stream_desc['LastEvaluatedShardId'] if 'LastEvaluatedShardId' in stream_desc else None
                 self._count_shards(stream_desc=stream_desc)
-                logging.info(f'Stream: {self._stream_arn} LastEvaluatedShardId: {last_shard_id}')
+                logging.debug(f'Stream: {self._stream_arn} LastEvaluatedShardId: {last_shard_id}')
 
             del self._stream_desc['LastEvaluatedShardId']
 
@@ -249,6 +249,9 @@ class TableAnalyzer:
                 self._estimations_dict['Results']['EstimationMethodDescription'] = \
                     f"On-Demand Tables initially have 4 partitions and there is no data that indicates a scaling event."
                 self._partitions = 4
+
+        logging.info(f'Estimated number of partitions: {self._partitions}')
+ 
 
     def _estimate_maximums(self):
         # On-Demand tables will be able to use the fully allocated previous peak capacity and partition hard limits
