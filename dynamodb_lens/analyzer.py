@@ -450,8 +450,8 @@ class TableAnalyzer:
                         self._metrics_data['ProvisionedRCU']['Timestamps'].extend(results['Timestamps'])
                         self._metrics_data['ProvisionedRCU']['Values'].extend(results['Values'])
 
-        self._metrics_data['MaxConsumedWCU'] = ceil(max(max_cwcu_per_period)/self.consumed_period_s)
-        self._metrics_data['MaxConsumedRCU'] = ceil(max(max_crcu_per_period)/self.consumed_period_s)
+        self._metrics_data['MaxConsumedWCU'] = ceil(max(max_cwcu_per_period)/self.consumed_period_s) if len(max_cwcu_per_period) > 0 else 0
+        self._metrics_data['MaxConsumedRCU'] = ceil(max(max_crcu_per_period)/self.consumed_period_s) if len(max_crcu_per_period) > 0 else 0
         self._metrics_data['MaxProvisionedWCU'] = ceil(max(max_pwcu_per_period)) if len(max_pwcu_per_period) > 0 else 0
         self._metrics_data['MaxProvisionedRCU'] = ceil(max(max_prcu_per_period)) if len(max_prcu_per_period) > 0 else 0
         logging.debug(self._metrics_data)
